@@ -1,0 +1,6 @@
+{
+  "name": "Boutique Pop Chop",
+  "description": "Boutique en ligne spécialisée dans la vente de vêtements et accessoires - Avenue Lisala N1, Ngaliema.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

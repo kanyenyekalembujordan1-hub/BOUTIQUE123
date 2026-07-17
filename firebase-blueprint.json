@@ -1,0 +1,66 @@
+{
+  "entities": {
+    "product": {
+      "title": "Product",
+      "description": "A product for sale in Boutique Pop Chop",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "price": { "type": "number" },
+        "description": { "type": "string", "maxLength": 500 },
+        "category": { "type": "string", "maxLength": 50 },
+        "imageUrl": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "price"]
+    },
+    "order": {
+      "title": "Order",
+      "description": "An e-commerce order created by a client",
+      "type": "object",
+      "properties": {
+        "clientName": { "type": "string", "maxLength": 100 },
+        "clientPhone": { "type": "string", "maxLength": 50 },
+        "clientEmail": { "type": "string", "maxLength": 100 },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "delivered", "cancelled"] },
+        "createdAt": { "type": "string" },
+        "paymentMethod": { "type": "string", "maxLength": 50 },
+        "paymentTxRef": { "type": "string", "maxLength": 100 },
+        "qrCodeData": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["clientName", "clientPhone", "total", "status"]
+    },
+    "setting": {
+      "title": "Setting",
+      "description": "Global shop configuration and settings",
+      "type": "object",
+      "properties": {
+        "adminEmail": { "type": "string", "maxLength": 100 },
+        "airtelMoney": { "type": "string", "maxLength": 50 },
+        "orangeMoney": { "type": "string", "maxLength": 50 },
+        "mpesa": { "type": "string", "maxLength": 50 },
+        "address": { "type": "string", "maxLength": 300 },
+        "slogan": { "type": "string", "maxLength": 200 },
+        "facebook": { "type": "string", "maxLength": 100 },
+        "instagram": { "type": "string", "maxLength": 100 },
+        "tiktok": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["adminEmail"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "product",
+      "description": "Products available in the catalog"
+    },
+    "/orders/{orderId}": {
+      "schema": "order",
+      "description": "Orders submitted by clients"
+    },
+    "/settings/{settingId}": {
+      "schema": "setting",
+      "description": "Global configurations for Boutique Pop Chop"
+    }
+  }
+}

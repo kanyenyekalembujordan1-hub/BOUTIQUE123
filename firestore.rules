@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Dynamic Admin check
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'kanyenyekalembujordan1@gmail.com' ||
+        request.auth.token.email == 'kanyenyekalembujordan1@gmail.com' ||
+        (exists(/databases/$(database)/documents/settings/shop_config) && 
+         get(/databases/$(database)/documents/settings/shop_config).data.adminEmail == request.auth.token.email)
+      );
+    }
+
+    // Products Rules
+    match /products/{productId} {
+      allow read: if true; // Anyone can browse products
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Orders Rules
+    match /orders/{orderId} {
+      allow read: if true; // Anyone can read an order (critical for anonymous client order tracking and receipt lookup)
+      allow create: if true; // Anyone can place an order
+      allow update, delete: if isAdmin(); // Only admin can update (deliver, cancel) or delete
+    }
+
+    // Settings Rules
+    match /settings/{settingId} {
+      allow read: if true; // Public payment numbers, location and slogan
+      allow create, update, delete: if isAdmin(); // Only admin can edit settings (admin email, payment numbers)
+    }
+  }
+}
