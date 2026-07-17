@@ -19,7 +19,9 @@ import {
   Heart,
   RefreshCw,
   Sun,
-  Moon
+  Moon,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import { 
   collection, 
@@ -136,6 +138,30 @@ export default function App() {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
+  // Internet connection status
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    return typeof navigator !== 'undefined' ? navigator.onLine : true;
+  });
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      showToast("Connexion Internet rétablie. Synchronisation des données...", "success");
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      showToast("Connexion Internet perdue. Mode hors-ligne activé.", "info");
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   // 1. Listen to Auth State
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -249,12 +275,30 @@ export default function App() {
   }, [currentUser, products.length, loading, settings.adminEmail]);
 
   const handleLogin = async () => {
+    if (!navigator.onLine) {
+      showToast("Vous êtes actuellement hors-ligne. Veuillez rétablir votre connexion internet.", "error");
+      return;
+    }
+
     try {
+      showToast("Ouverture de la fenêtre de connexion Google...", "info");
       await signInWithPopup(auth, googleProvider);
       showToast("Connexion Google réussie !", "success");
-    } catch (err) {
-      console.error("Login failed", err);
-      showToast("La connexion a échoué. Veuillez réessayer.", "error");
+    } catch (err: any) {
+      console.error("Login failed:", err);
+      const errorCode = err?.code;
+      
+      if (errorCode === 'auth/popup-blocked') {
+        showToast("La fenêtre de connexion a été bloquée. Veuillez autoriser les pop-ups ou ouvrir l'application dans un nouvel onglet !", "error");
+      } else if (errorCode === 'auth/popup-closed-by-user') {
+        showToast("Connexion annulée par l'utilisateur.", "info");
+      } else if (errorCode === 'auth/network-request-failed') {
+        showToast("Erreur réseau. Veuillez vérifier votre connexion internet.", "error");
+      } else if (errorCode === 'auth/cancelled-popup-request') {
+        showToast("Une autre fenêtre de connexion est déjà en cours d'ouverture.", "info");
+      } else {
+        showToast(`La connexion a échoué (${errorCode || 'Erreur inconnue'}). Veuillez réessayer ou ouvrir dans un nouvel onglet.`, "error");
+      }
     }
   };
 
@@ -369,6 +413,28 @@ export default function App() {
 
             {/* Theme Toggle & Authentication widgets */}
             <div className="flex items-center gap-3">
+              {/* Connection Status Pill */}
+              <div 
+                className={`p-2 py-2 px-3 border transition-all flex items-center gap-1.5 font-bold uppercase tracking-wider text-[9px] ${
+                  isOnline 
+                    ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/20' 
+                    : 'bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border-rose-500/20 animate-pulse'
+                }`}
+                title={isOnline ? "Vous êtes connecté à internet" : "Vous êtes actuellement hors-ligne"}
+              >
+                {isOnline ? (
+                  <>
+                    <Wifi className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>En ligne</span>
+                  </>
+                ) : (
+                  <>
+                    <WifiOff className="w-3.5 h-3.5 text-rose-500" />
+                    <span>Hors-ligne</span>
+                  </>
+                )}
+              </div>
+
               {/* Theme Toggle Button */}
               <button
                 onClick={() => setIsDarkMode(!isDarkMode)}
@@ -478,13 +544,32 @@ export default function App() {
                       </p>
                     </div>
 
-                    {!currentUser ? (
-                      <button
-                        onClick={handleLogin}
-                        className="w-full py-3 bg-[#2D2926] hover:bg-[#FF6321] text-white transition-all text-xs font-black uppercase tracking-widest cursor-pointer shadow-sm"
-                      >
-                        Se connecter avec Google
-                      </button>
+                    {!isOnline ? (
+                      <div className="space-y-3">
+                        <div className="p-3.5 bg-rose-50 border border-rose-200 text-xs text-rose-800 font-bold uppercase tracking-wider flex items-center justify-center gap-2">
+                          <WifiOff className="w-4 h-4 text-rose-600 animate-pulse" />
+                          <span>Hors-ligne : Connexion requise</span>
+                        </div>
+                        <button
+                          disabled
+                          className="w-full py-3 bg-[#EFEDE9] text-[#2D2926]/40 text-xs font-black uppercase tracking-widest cursor-not-allowed border border-[#2D2926]/10"
+                        >
+                          Se connecter avec Google (Indisponible)
+                        </button>
+                      </div>
+                    ) : !currentUser ? (
+                      <div className="space-y-3">
+                        <button
+                          onClick={handleLogin}
+                          className="w-full py-3 bg-[#2D2926] hover:bg-[#FF6321] text-white transition-all text-xs font-black uppercase tracking-widest cursor-pointer shadow-sm flex items-center justify-center gap-2"
+                        >
+                          <LogIn className="w-4 h-4" />
+                          Se connecter avec Google
+                        </button>
+                        <p className="text-[9px] text-[#2D2926]/45 font-bold uppercase tracking-widest mt-2 leading-relaxed">
+                          💡 Astuce : Si la fenêtre pop-up de connexion ne s'ouvre pas, autorisez les pop-ups pour ce site ou ouvrez l'application dans un nouvel onglet.
+                        </p>
+                      </div>
                     ) : (
                       <div className="space-y-4">
                         <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-800 font-bold uppercase tracking-wider">

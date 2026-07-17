@@ -26,13 +26,28 @@ import {
   query, 
   where, 
   orderBy,
-  onSnapshot
+  onSnapshot,
+  enableIndexedDbPersistence
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Enable offline persistence for client resilience
+if (typeof window !== 'undefined') {
+  enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      console.warn('Firestore offline persistence failed-precondition: multiple tabs open');
+    } else if (err.code === 'unimplemented') {
+      console.warn('Firestore offline persistence unimplemented in this browser');
+    } else {
+      console.error('Firestore offline persistence error:', err);
+    }
+  });
+}
+
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
