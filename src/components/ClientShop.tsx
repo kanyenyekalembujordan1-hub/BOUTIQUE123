@@ -28,15 +28,16 @@ import {
 import { jsPDF } from 'jspdf';
 import { collection, addDoc, getDoc, doc, onSnapshot } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { Product, Order, OrderItem, ShopSettings, TrackingStep } from '../types';
+import { Product, Order, OrderItem, ShopSettings, TrackingStep, PhoneUser } from '../types';
 
 interface ClientShopProps {
   settings: ShopSettings;
   products: Product[];
   showToast: (message: string, type: 'success' | 'error' | 'info') => void;
+  currentUser?: PhoneUser | null;
 }
 
-export default function ClientShop({ settings, products, showToast }: ClientShopProps) {
+export default function ClientShop({ settings, products, showToast, currentUser }: ClientShopProps) {
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [clientName, setClientName] = useState('');
@@ -46,6 +47,13 @@ export default function ClientShop({ settings, products, showToast }: ClientShop
   const [paymentTxRef, setPaymentTxRef] = useState('');
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [currentOrder, setCurrentOrder] = useState<Order | null>(null);
+  
+  // Pre-fill phone if client is logged in
+  useEffect(() => {
+    if (currentUser && currentUser.role === 'client') {
+      setClientPhone(currentUser.phoneNumber);
+    }
+  }, [currentUser]);
   
   // Tracking State
   const [trackingId, setTrackingId] = useState('');

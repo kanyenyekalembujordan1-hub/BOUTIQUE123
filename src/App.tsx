@@ -42,14 +42,15 @@ import {
   onAuthStateChanged, 
   User 
 } from 'firebase/auth';
-import { db, auth, googleProvider, handleFirestoreError, OperationType } from './lib/firebase';
-import { Product, Order, ShopSettings } from './types';
+import { db, auth, handleFirestoreError, OperationType } from './lib/firebase';
+import { Product, Order, ShopSettings, PhoneUser } from './types';
 import ClientShop from './components/ClientShop';
 import AdminPanel from './components/AdminPanel';
 import Toast from './components/Toast';
 
 const DEFAULT_SETTINGS: ShopSettings = {
   adminEmail: 'kanyenyekalembujordan1@gmail.com',
+  adminPhones: '0998283123',
   airtelMoney: '0998283123',
   orangeMoney: '0891234567',
   mpesa: '0812345678',
@@ -108,11 +109,32 @@ const DEFAULT_PRODUCTS = [
 
 export default function App() {
   const [activePortal, setActivePortal] = useState<'client' | 'admin'>('client');
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<PhoneUser | null>(() => {
+    const saved = localStorage.getItem('boutique_pop_chop_user');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [settings, setSettings] = useState<ShopSettings>(DEFAULT_SETTINGS);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Phone Login Modal States
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+  const [phoneInput, setPhoneInput] = useState<string>('');
+  const [otpInput, setOtpInput] = useState<string>('');
+  const [otpStep, setOtpStep] = useState<'phone' | 'otp'>('phone');
+  const [generatedOtp, setGeneratedOtp] = useState<string>('');
+  const [loginError, setLoginError] = useState<string>('');
+
+  // Persist User Session
+  const saveUserSession = (user: PhoneUser | null) => {
+    setCurrentUser(user);
+    if (user) {
+      localStorage.setItem('boutique_pop_chop_user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('boutique_pop_chop_user');
+    }
+  };
 
   // Dark Mode State
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -146,9 +168,6 @@ export default function App() {
     return typeof navigator !== 'undefined' ? navigator.onLine : true;
   });
 
-  // State to track if Google login failed due to unauthorized domain
-  const [unauthorizedDomainError, setUnauthorizedDomainError] = useState<boolean>(false);
-
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
@@ -166,14 +185,6 @@ export default function App() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
-
-  // 1. Listen to Auth State
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-    });
-    return unsubscribe;
   }, []);
 
   // 2. Fetch general settings, products, and orders from Firestore
@@ -240,13 +251,8 @@ export default function App() {
     if (!currentUser || loading) return;
 
     const checkAndSeedDatabase = async () => {
-      // Check if logged-in user is actually an admin
-      const userEmail = currentUser.email?.toLowerCase();
-      const authorizedEmails = [
-        'kanyenyekalembujordan1@gmail.com',
-        settings.adminEmail.toLowerCase()
-      ];
-      const isAdmin = userEmail ? authorizedEmails.includes(userEmail) : false;
+      // Check if logged-in user is actually an admin (manager)
+      const isAdmin = currentUser.role === 'manager';
 
       if (!isAdmin) return;
 
@@ -278,61 +284,87 @@ export default function App() {
     };
 
     checkAndSeedDatabase();
-  }, [currentUser, products.length, loading, settings.adminEmail]);
+  }, [currentUser, products.length, loading]);
 
-  const handleLogin = async () => {
-    if (!navigator.onLine) {
-      showToast("Vous êtes actuellement hors-ligne. Veuillez rétablir votre connexion internet.", "error");
+  const handleLogin = () => {
+    setIsLoginModalOpen(true);
+  };
+
+  const sendOtp = () => {
+    const cleanPhone = phoneInput.trim();
+    if (!cleanPhone) {
+      setLoginError("Veuillez entrer un numéro de téléphone valide.");
+      return;
+    }
+    if (cleanPhone.length < 8) {
+      setLoginError("Le numéro de téléphone doit contenir au moins 8 chiffres.");
       return;
     }
 
-    try {
-      showToast("Ouverture de la fenêtre de connexion Google...", "info");
-      await signInWithPopup(auth, googleProvider);
-      showToast("Connexion Google réussie !", "success");
-    } catch (err: any) {
-      console.error("Login failed:", err);
-      const errorCode = err?.code;
-      
-      if (errorCode === 'auth/popup-blocked') {
-        showToast("La fenêtre de connexion a été bloquée. Veuillez autoriser les pop-ups ou ouvrir l'application dans un nouvel onglet !", "error");
-      } else if (errorCode === 'auth/popup-closed-by-user') {
-        showToast("Connexion annulée par l'utilisateur.", "info");
-      } else if (errorCode === 'auth/network-request-failed') {
-        showToast("Erreur réseau. Veuillez vérifier votre connexion internet.", "error");
-      } else if (errorCode === 'auth/cancelled-popup-request') {
-        showToast("Une autre fenêtre de connexion est déjà en cours d'ouverture.", "info");
-      } else if (errorCode === 'auth/unauthorized-domain') {
-        setUnauthorizedDomainError(true);
-        showToast("Erreur de domaine non autorisé. Veuillez ajouter ce domaine à la console Firebase.", "error");
-      } else {
-        showToast(`La connexion a échoué (${errorCode || 'Erreur inconnue'}). Veuillez réessayer ou ouvrir dans un nouvel onglet.`, "error");
-      }
+    // Generate a random 6-digit OTP code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedOtp(code);
+    setOtpStep('otp');
+    setLoginError('');
+    showToast(`Code de vérification envoyé (Simulé : ${code})`, 'info');
+  };
+
+  const verifyOtp = () => {
+    if (otpInput.trim() !== generatedOtp) {
+      setLoginError("Code de vérification incorrect. Veuillez réessayer.");
+      return;
+    }
+
+    const cleanPhone = phoneInput.trim();
+    
+    // Check against settings.adminPhones or fallback to default
+    const managerPhonesList = settings.adminPhones 
+      ? settings.adminPhones.split(/[,;\s]+/).map(p => p.trim()).filter(Boolean)
+      : ['0998283123'];
+
+    const isManager = managerPhonesList.includes(cleanPhone);
+    
+    const loggedUser: PhoneUser = {
+      phoneNumber: cleanPhone,
+      role: isManager ? 'manager' : 'client'
+    };
+
+    saveUserSession(loggedUser);
+    setIsLoginModalOpen(false);
+    setPhoneInput('');
+    setOtpInput('');
+    setOtpStep('phone');
+    setGeneratedOtp('');
+    setLoginError('');
+
+    if (isManager) {
+      showToast("Connexion réussie en tant que Gérant !", "success");
+      setActivePortal('admin');
+    } else {
+      showToast("Connexion réussie en tant que Client !", "success");
+      setActivePortal('client');
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      setActivePortal('client');
-      showToast("Vous avez été déconnecté.", "info");
-    } catch (err) {
-      showToast("Échec de la déconnexion", "error");
-    }
+  const closeLoginModal = () => {
+    setIsLoginModalOpen(false);
+    setPhoneInput('');
+    setOtpInput('');
+    setOtpStep('phone');
+    setGeneratedOtp('');
+    setLoginError('');
+  };
+
+  const handleLogout = () => {
+    saveUserSession(null);
+    setActivePortal('client');
+    showToast("Vous avez été déconnecté.", "info");
   };
 
   // Determine if the current logged-in user is an authorized admin
   const isUserAdmin = () => {
     if (!currentUser) return false;
-    const userEmail = currentUser.email?.toLowerCase();
-    
-    // Check against dynamically saved settings email, or fallback to the requested default admin
-    const authorizedEmails = [
-      'kanyenyekalembujordan1@gmail.com',
-      settings.adminEmail.toLowerCase()
-    ];
-    
-    return userEmail ? authorizedEmails.includes(userEmail) : false;
+    return currentUser.role === 'manager';
   };
 
   return (
@@ -463,15 +495,15 @@ export default function App() {
                 )}
               </button>
 
-              {/* Google Authentication widget */}
+              {/* Phone Authentication widget */}
               {currentUser ? (
                 <div className="flex items-center gap-3 bg-white dark:bg-[#26211E] px-4 py-2 border border-[#2D2926]/10 dark:border-white/10">
-                  <span className="text-[11px] font-bold text-[#2D2926] dark:text-[#EFEDE9] hidden sm:inline">
-                    {currentUser.displayName || currentUser.email}
+                  <span className="text-[11px] font-bold text-[#2D2926] dark:text-[#EFEDE9] sm:inline font-mono">
+                    {currentUser.phoneNumber}
                   </span>
                   {isUserAdmin() && (
                     <span className="bg-[#FF6321] text-white text-[9px] px-2 py-0.5 font-bold uppercase font-mono">
-                      Gérant Admin
+                      Gérant
                     </span>
                   )}
                   <button
@@ -484,11 +516,11 @@ export default function App() {
                 </div>
               ) : (
                 <button
-                  onClick={handleLogin}
+                  onClick={() => setIsLoginModalOpen(true)}
                   className="bg-white dark:bg-[#26211E] hover:bg-[#2D2926] dark:hover:bg-[#EFEDE9] hover:text-white dark:hover:text-[#2D2926] text-[#2D2926] dark:text-[#EFEDE9] border border-[#2D2926] dark:border-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 cursor-pointer"
                 >
                   <LogIn className="w-4 h-4 text-[#FF6321]" />
-                  Connexion Gérant (Google)
+                  Connexion par Téléphone
                 </button>
               )}
             </div>
@@ -516,11 +548,34 @@ export default function App() {
                 exit={{ opacity: 0, y: -15 }}
                 transition={{ duration: 0.25 }}
               >
-                <ClientShop 
-                  settings={settings}
-                  products={products}
-                  showToast={showToast}
-                />
+                {currentUser && currentUser.role === 'manager' ? (
+                  <div className="max-w-md mx-auto py-16 text-center bg-white border border-[#2D2926]/10 p-8 space-y-6 shadow-sm">
+                    <AlertTriangle className="w-12 h-12 text-[#FF6321] mx-auto stroke-[1]" />
+                    <div>
+                      <h3 className="text-xl font-black uppercase tracking-tight text-[#2D2926]">Boutique Non Accessible</h3>
+                      <p className="text-[11px] font-semibold text-[#2D2926]/60 mt-2 leading-relaxed">
+                        L'espace client est accessible à tous les numéros sauf celui du gérant (<span className="font-bold text-[#2D2926] font-mono">{currentUser.phoneNumber}</span>).
+                      </p>
+                      <p className="text-[11px] font-semibold text-[#2D2926]/60 mt-1 leading-relaxed">
+                        Veuillez vous déconnecter pour naviguer et passer commande en tant que client.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full py-3 bg-[#2D2926] hover:bg-[#FF6321] text-white text-xs font-black uppercase tracking-widest cursor-pointer transition-colors flex items-center justify-center gap-2"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Se Déconnecter de l'Espace Gérant
+                    </button>
+                  </div>
+                ) : (
+                  <ClientShop 
+                    settings={settings}
+                    products={products}
+                    showToast={showToast}
+                    currentUser={currentUser}
+                  />
+                )}
               </motion.div>
             )}
 
@@ -548,100 +603,36 @@ export default function App() {
                     <div>
                       <h3 className="text-xl font-black uppercase tracking-tight text-[#2D2926]">Accès Réservé au Gérant</h3>
                       <p className="text-[11px] font-semibold text-[#2D2926]/60 mt-2 leading-relaxed">
-                        Cette section requiert de se connecter avec un compte Google habilité. 
-                        L'identifiant gérant configuré est : <span className="font-bold text-[#2D2926] font-mono select-all bg-[#EFEDE9] px-2 py-0.5 rounded border border-[#2D2926]/5">{settings.adminEmail}</span>
+                        Cette section requiert de se connecter avec un numéro de téléphone Gérant autorisé.
+                      </p>
+                      <p className="text-[11px] font-semibold text-[#2D2926]/60 mt-1 leading-relaxed">
+                        Le gérant principal configuré est : <span className="font-bold text-[#2D2926] font-mono select-all bg-[#EFEDE9] px-2 py-0.5 rounded border border-[#2D2926]/5">{settings.adminPhones || '0998283123'}</span>
                       </p>
                     </div>
 
-                    {!isOnline ? (
-                      <div className="space-y-3">
-                        <div className="p-3.5 bg-rose-50 border border-rose-200 text-xs text-rose-800 font-bold uppercase tracking-wider flex items-center justify-center gap-2">
-                          <WifiOff className="w-4 h-4 text-rose-600 animate-pulse" />
-                          <span>Hors-ligne : Connexion requise</span>
-                        </div>
-                        <button
-                          disabled
-                          className="w-full py-3 bg-[#EFEDE9] text-[#2D2926]/40 text-xs font-black uppercase tracking-widest cursor-not-allowed border border-[#2D2926]/10"
-                        >
-                          Se connecter avec Google (Indisponible)
-                        </button>
-                      </div>
-                    ) : !currentUser ? (
+                    {!currentUser ? (
                       <div className="space-y-3">
                         <button
-                          onClick={handleLogin}
+                          onClick={() => setIsLoginModalOpen(true)}
                           className="w-full py-3 bg-[#2D2926] hover:bg-[#FF6321] text-white transition-all text-xs font-black uppercase tracking-widest cursor-pointer shadow-sm flex items-center justify-center gap-2"
                         >
                           <LogIn className="w-4 h-4" />
-                          Se connecter avec Google
+                          Se connecter par Téléphone
                         </button>
                         <p className="text-[9px] text-[#2D2926]/45 font-bold uppercase tracking-widest mt-2 leading-relaxed">
-                          💡 Astuce : Si la fenêtre pop-up de connexion ne s'ouvre pas, autorisez les pop-ups pour ce site ou ouvrez l'application dans un nouvel onglet.
+                          Saisissez votre numéro de téléphone gérant pour recevoir un code de vérification SMS simulé.
                         </p>
-
-                        {unauthorizedDomainError && (
-                          <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-500/20 rounded text-left space-y-3">
-                            <div className="flex items-start gap-2.5">
-                              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                              <div>
-                                <h4 className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                                  Domaine Non Autorisé dans Firebase
-                                </h4>
-                                <p className="text-[10px] text-amber-700 dark:text-amber-400/90 mt-1 font-medium leading-relaxed">
-                                  Pour sécuriser l'authentification Google, vous devez autoriser le domaine actuel de cette application dans votre console Firebase.
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="bg-white dark:bg-black/20 p-2.5 border border-amber-200 dark:border-amber-500/10 rounded flex items-center justify-between gap-2">
-                              <div className="font-mono text-[10px] text-[#2D2926] dark:text-white/90 truncate select-all">
-                                {typeof window !== 'undefined' ? window.location.hostname : ''}
-                              </div>
-                              <button
-                                onClick={() => {
-                                  if (typeof window !== 'undefined') {
-                                    navigator.clipboard.writeText(window.location.hostname);
-                                    showToast("Domaine copié !", "success");
-                                  }
-                                }}
-                                className="p-1 px-2 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/40 dark:hover:bg-amber-950/60 text-amber-800 dark:text-amber-300 rounded text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors"
-                              >
-                                <Copy className="w-3.5 h-3.5" />
-                                Copier
-                              </button>
-                            </div>
-
-                            <div className="space-y-1.5 text-[10px] text-amber-800/90 dark:text-amber-300/90 font-medium">
-                              <p className="font-bold uppercase tracking-wider text-[9px]">ÉTAPES DE RÉSOLUTION :</p>
-                              <ol className="list-decimal list-inside space-y-1 pl-1">
-                                <li>Cliquez sur le bouton ci-dessous pour ouvrir les paramètres Firebase.</li>
-                                <li>Allez dans l'onglet <span className="font-bold">Paramètres</span> (en haut) puis <span className="font-bold">Domaines autorisés</span>.</li>
-                                <li>Cliquez sur <span className="font-bold">Ajouter un domaine</span> et collez le domaine copié ci-dessus.</li>
-                              </ol>
-                            </div>
-
-                            <a
-                              href="https://console.firebase.google.com/project/gen-lang-client-0583309131/authentication/settings"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white transition-all text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm rounded cursor-pointer"
-                            >
-                              <span>Ouvrir la Console Firebase</span>
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          </div>
-                        )}
                       </div>
                     ) : (
                       <div className="space-y-4">
                         <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-800 font-bold uppercase tracking-wider">
-                          Votre email ({currentUser.email}) n'est pas autorisé.
+                          Votre numéro ({currentUser.phoneNumber}) n'est pas autorisé en tant que Gérant.
                         </div>
                         <button
                           onClick={handleLogout}
                           className="w-full py-3 border border-[#2D2926] text-[#2D2926] hover:bg-[#2D2926]/5 text-xs font-black uppercase tracking-widest cursor-pointer transition-colors"
                         >
-                          Se connecter avec un autre compte
+                          Se connecter avec un autre numéro
                         </button>
                       </div>
                     )}
@@ -747,6 +738,116 @@ export default function App() {
           </p>
         </div>
       </footer>
+
+      {/* Phone Login Modal */}
+      <AnimatePresence>
+        {isLoginModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#2D2926]/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-sm bg-white dark:bg-[#201C19] border border-[#2D2926]/10 dark:border-white/10 p-6 space-y-6 shadow-xl relative"
+            >
+              <button
+                onClick={closeLoginModal}
+                className="absolute top-4 right-4 text-[#2D2926]/60 dark:text-white/60 hover:text-[#FF6321] text-xs font-black uppercase tracking-wider cursor-pointer"
+              >
+                ✕
+              </button>
+
+              <div className="text-center space-y-1.5">
+                <h3 className="text-lg font-black uppercase tracking-tight text-[#2D2926] dark:text-white">
+                  Connexion par Téléphone
+                </h3>
+                <p className="text-[10px] font-semibold text-[#2D2926]/60 dark:text-white/60 uppercase tracking-wider">
+                  Accès Client &amp; Gérant Admin
+                </p>
+              </div>
+
+              {loginError && (
+                <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-950/40 text-red-800 dark:text-red-300 text-xs font-bold uppercase tracking-wide text-center">
+                  {loginError}
+                </div>
+              )}
+
+              {otpStep === 'phone' ? (
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-wider text-[#2D2926] dark:text-white/80">
+                      Numéro de Téléphone
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#2D2926]/40 dark:text-white/40 font-mono">
+                        RDC
+                      </span>
+                      <input
+                        type="tel"
+                        placeholder="Ex: 0998283123"
+                        value={phoneInput}
+                        onChange={(e) => setPhoneInput(e.target.value.replace(/\D/g, ''))}
+                        className="w-full pl-12 pr-3 py-2.5 bg-stone-50 dark:bg-stone-900 border border-[#2D2926]/15 dark:border-white/10 text-xs text-[#2D2926] dark:text-white focus:outline-none focus:border-[#FF6321] font-mono font-bold"
+                        onKeyDown={(e) => e.key === 'Enter' && sendOtp()}
+                      />
+                    </div>
+                    <p className="text-[9px] text-[#2D2926]/50 dark:text-white/40 font-semibold leading-normal mt-1">
+                      Saisissez <span className="font-bold underline">{settings.adminPhones || '0998283123'}</span> pour vous connecter en tant que Gérant. Tout autre numéro vous connectera en tant que client.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={sendOtp}
+                    className="w-full py-3 bg-[#2D2926] hover:bg-[#FF6321] dark:bg-stone-800 dark:hover:bg-[#FF6321] text-white transition-all text-xs font-black uppercase tracking-widest cursor-pointer shadow-sm flex items-center justify-center gap-2"
+                  >
+                    <span>Envoyer le Code SMS</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-wider text-[#2D2926] dark:text-white/80">
+                      Code de vérification (OTP)
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      placeholder="Saisissez le code"
+                      value={otpInput}
+                      onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-3 py-2.5 bg-stone-50 dark:bg-stone-900 border border-[#2D2926]/15 dark:border-white/10 text-xs text-center text-[#2D2926] dark:text-white focus:outline-none focus:border-[#FF6321] tracking-[0.5em] font-mono font-black"
+                      onKeyDown={(e) => e.key === 'Enter' && verifyOtp()}
+                    />
+                    <div className="bg-[#FF6321]/5 border border-[#FF6321]/20 p-2.5 rounded-none text-center mt-3">
+                      <p className="text-[10px] text-[#FF6321] font-bold uppercase tracking-wider">
+                        Code SMS de simulation : <span className="font-mono text-xs select-all font-black bg-white dark:bg-[#201C19] px-2 py-0.5 border border-[#FF6321]/30">{generatedOtp}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setOtpStep('phone');
+                        setOtpInput('');
+                        setLoginError('');
+                      }}
+                      className="flex-1 py-3 border border-[#2D2926]/20 dark:border-white/20 text-[#2D2926] dark:text-white hover:bg-stone-100 dark:hover:bg-stone-800 text-xs font-black uppercase tracking-widest cursor-pointer transition-colors"
+                    >
+                      Retour
+                    </button>
+                    <button
+                      onClick={verifyOtp}
+                      className="flex-1 py-3 bg-[#FF6321] text-white hover:bg-[#E04E10] text-xs font-black uppercase tracking-widest cursor-pointer shadow-sm transition-colors"
+                    >
+                      Confirmer
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

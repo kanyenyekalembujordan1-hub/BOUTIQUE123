@@ -43,6 +43,7 @@ export interface Order {
 
 export interface ShopSettings {
   adminEmail: string;
+  adminPhones?: string;
   airtelMoney: string;
   orangeMoney: string;
   mpesa: string;
@@ -52,4 +53,9 @@ export interface ShopSettings {
   instagram: string;
   tiktok: string;
   exchangeRate?: number;
+}
+
+export interface PhoneUser {
+  phoneNumber: string;
+  role: 'manager' | 'client';
 }

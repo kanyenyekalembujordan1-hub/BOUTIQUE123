@@ -75,6 +75,7 @@ export default function AdminPanel({ settings, products, orders, onSettingsUpdat
   
   // Settings modification
   const [adminEmail, setAdminEmail] = useState(settings.adminEmail);
+  const [adminPhones, setAdminPhones] = useState(settings.adminPhones || '0998283123');
   const [airtelMoney, setAirtelMoney] = useState(settings.airtelMoney);
   const [orangeMoney, setOrangeMoney] = useState(settings.orangeMoney);
   const [mpesa, setMpesa] = useState(settings.mpesa);
@@ -474,8 +475,8 @@ export default function AdminPanel({ settings, products, orders, onSettingsUpdat
   // Settings Save
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adminEmail.trim()) {
-      showToast("L'email de l'administrateur est obligatoire", "error");
+    if (!adminPhones.trim()) {
+      showToast("Le numéro de téléphone du gérant est obligatoire", "error");
       return;
     }
 
@@ -483,6 +484,7 @@ export default function AdminPanel({ settings, products, orders, onSettingsUpdat
     try {
       const updatedSettings: ShopSettings = {
         adminEmail: adminEmail.trim(),
+        adminPhones: adminPhones.trim(),
         airtelMoney: airtelMoney.trim(),
         orangeMoney: orangeMoney.trim(),
         mpesa: mpesa.trim(),
@@ -1408,23 +1410,23 @@ export default function AdminPanel({ settings, products, orders, onSettingsUpdat
             <p className="text-[11px] font-bold uppercase tracking-wider text-[#2D2926]/60 mt-1">Modifiez vos coordonnées, numéros de paiement et l'ID Administrateur.</p>
           </div>
 
-          {/* Admin Email Modification */}
-          <div className="space-y-3 p-4 bg-red-50/40 border border-red-200 rounded-none">
+          {/* Admin Phones Modification */}
+          <div className="space-y-3 p-4 bg-[#FF6321]/5 border border-[#FF6321]/20 rounded-none">
             <div className="flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-red-800" />
-              <span className="text-xs font-black text-red-800 uppercase font-mono tracking-wider">Sécurité : Identifiant de l'Administrateur</span>
+              <UserCheck className="w-4 h-4 text-[#FF6321]" />
+              <span className="text-xs font-black text-[#2D2926] uppercase font-mono tracking-wider">Sécurité : Numéros de Téléphone Gérant</span>
             </div>
             <p className="text-[11px] text-[#2D2926]/70 uppercase tracking-wide leading-relaxed font-semibold">
-              Pour des raisons de sécurité, modifiez l'adresse email Google autorisée à piloter cet espace d'administration. 
-              <span className="font-black text-[#2D2926]"> Note : Assurez-vous de saisir un email valide !</span>
+              Modifiez les numéros de téléphone autorisés à se connecter et piloter l'espace d'administration. 
+              <span className="font-black text-[#2D2926]"> Note : Séparez les numéros par des virgules si vous en avez plusieurs. Exemple : 0998283123</span>
             </p>
             <input
-              type="email"
+              type="text"
               required
-              placeholder="Ex: monnouveautravail@gmail.com"
-              value={adminEmail}
-              onChange={(e) => setAdminEmail(e.target.value)}
-              className="w-full px-3 py-2.5 bg-white border border-[#2D2926]/15 text-xs text-[#2D2926] focus:outline-none focus:border-[#FF6321] rounded-none font-medium placeholder:text-[#2D2926]/30"
+              placeholder="Ex: 0998283123, 0891234567"
+              value={adminPhones}
+              onChange={(e) => setAdminPhones(e.target.value)}
+              className="w-full px-3 py-2.5 bg-white border border-[#2D2926]/15 text-xs text-[#2D2926] focus:outline-none focus:border-[#FF6321] rounded-none font-mono font-medium placeholder:text-[#2D2926]/30"
             />
           </div>
 
