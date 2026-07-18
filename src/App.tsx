@@ -21,7 +21,10 @@ import {
   Sun,
   Moon,
   Wifi,
-  WifiOff
+  WifiOff,
+  AlertTriangle,
+  ExternalLink,
+  Copy
 } from 'lucide-react';
 import { 
   collection, 
@@ -142,6 +145,9 @@ export default function App() {
   const [isOnline, setIsOnline] = useState<boolean>(() => {
     return typeof navigator !== 'undefined' ? navigator.onLine : true;
   });
+
+  // State to track if Google login failed due to unauthorized domain
+  const [unauthorizedDomainError, setUnauthorizedDomainError] = useState<boolean>(false);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -296,6 +302,9 @@ export default function App() {
         showToast("Erreur réseau. Veuillez vérifier votre connexion internet.", "error");
       } else if (errorCode === 'auth/cancelled-popup-request') {
         showToast("Une autre fenêtre de connexion est déjà en cours d'ouverture.", "info");
+      } else if (errorCode === 'auth/unauthorized-domain') {
+        setUnauthorizedDomainError(true);
+        showToast("Erreur de domaine non autorisé. Veuillez ajouter ce domaine à la console Firebase.", "error");
       } else {
         showToast(`La connexion a échoué (${errorCode || 'Erreur inconnue'}). Veuillez réessayer ou ouvrir dans un nouvel onglet.`, "error");
       }
@@ -569,6 +578,59 @@ export default function App() {
                         <p className="text-[9px] text-[#2D2926]/45 font-bold uppercase tracking-widest mt-2 leading-relaxed">
                           💡 Astuce : Si la fenêtre pop-up de connexion ne s'ouvre pas, autorisez les pop-ups pour ce site ou ouvrez l'application dans un nouvel onglet.
                         </p>
+
+                        {unauthorizedDomainError && (
+                          <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-500/20 rounded text-left space-y-3">
+                            <div className="flex items-start gap-2.5">
+                              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                              <div>
+                                <h4 className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                                  Domaine Non Autorisé dans Firebase
+                                </h4>
+                                <p className="text-[10px] text-amber-700 dark:text-amber-400/90 mt-1 font-medium leading-relaxed">
+                                  Pour sécuriser l'authentification Google, vous devez autoriser le domaine actuel de cette application dans votre console Firebase.
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="bg-white dark:bg-black/20 p-2.5 border border-amber-200 dark:border-amber-500/10 rounded flex items-center justify-between gap-2">
+                              <div className="font-mono text-[10px] text-[#2D2926] dark:text-white/90 truncate select-all">
+                                {typeof window !== 'undefined' ? window.location.hostname : ''}
+                              </div>
+                              <button
+                                onClick={() => {
+                                  if (typeof window !== 'undefined') {
+                                    navigator.clipboard.writeText(window.location.hostname);
+                                    showToast("Domaine copié !", "success");
+                                  }
+                                }}
+                                className="p-1 px-2 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/40 dark:hover:bg-amber-950/60 text-amber-800 dark:text-amber-300 rounded text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-colors"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                                Copier
+                              </button>
+                            </div>
+
+                            <div className="space-y-1.5 text-[10px] text-amber-800/90 dark:text-amber-300/90 font-medium">
+                              <p className="font-bold uppercase tracking-wider text-[9px]">ÉTAPES DE RÉSOLUTION :</p>
+                              <ol className="list-decimal list-inside space-y-1 pl-1">
+                                <li>Cliquez sur le bouton ci-dessous pour ouvrir les paramètres Firebase.</li>
+                                <li>Allez dans l'onglet <span className="font-bold">Paramètres</span> (en haut) puis <span className="font-bold">Domaines autorisés</span>.</li>
+                                <li>Cliquez sur <span className="font-bold">Ajouter un domaine</span> et collez le domaine copié ci-dessus.</li>
+                              </ol>
+                            </div>
+
+                            <a
+                              href="https://console.firebase.google.com/project/gen-lang-client-0583309131/authentication/settings"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white transition-all text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-sm rounded cursor-pointer"
+                            >
+                              <span>Ouvrir la Console Firebase</span>
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-4">
